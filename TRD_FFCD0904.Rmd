@@ -2,7 +2,9 @@
 title: "Analyse critère principal FFCD0904"
 author: "Xavier Tizon"
 date: "18/09/2018"
-output: html_notebook
+output: 
+  html_document: 
+    keep_md: yes
 ---
 
 # Introduction
@@ -183,11 +185,11 @@ str(df_eva)
 # MARCHPA : solution : https://stackoverflow.com/questions/44708248/using-tidyverse-gather-to-output-multiple-value-vectors-with-a-single-key-in-a
 # Meilleure solution : rajouter l'information sur le temps avant de faire le join!!!
 
-test <- df_eva %>% 
-  purrr::set_names( ~ str_replace(., "F[0-9]{3}_", "") )  %>% 
-  separate( col = vars(-D_ID_PATIENT, -palier), into = c("var_name", "period"), sep=-2 )  
-  gather(key = "var", value = "val", -D_ID_PATIENT, -palier)  
-  spread( key = "period" , value = "val" ) 
+# test <- df_eva %>% 
+#   purrr::set_names( ~ str_replace(., "F[0-9]{3}_", "") )  %>% 
+#   separate( col = vars(-D_ID_PATIENT, -palier), into = c("var_name", "period"), sep=-2 )  
+#   gather(key = "var", value = "val", -D_ID_PATIENT, -palier)  
+#   spread( key = "period" , value = "val" ) 
 
 
 ```
@@ -207,11 +209,11 @@ vars <- setNames(as.character(var_names_and_labels$VAR_NAME), var_names_and_labe
 
 vars <- unlist( split(as.character(var_names_and_labels$VAR_NAME), var_names_and_labels$VAR_LABEL))
 
-View(vars)
+# View(vars)
 
 df_eva %>% 
   select( D_ID_PATIENT, matches("_E6") ) %>% 
-  dplyr::rename(!!vars) %>% 
+  # dplyr::rename(!!vars) %>% 
   kable( caption = "This is a nice table") %>% 
   kable_styling("striped", full_width = FALSE) %>% 
   group_rows( index = c("palier -1"= 3, "palier 0") ) # TODO - use palier values instead
@@ -222,7 +224,9 @@ df_eva %>%
 ```{r echo = FALSE, results = 'asis'}
 df_eva %>% 
   select( D_ID_PATIENT, palier, matches("_E8") ) %>% 
-  kable(caption = "a nice table")
+  kable(caption = "a nice table") %>% 
+  kable_styling("striped", full_width = FALSE) %>% 
+  group_rows( index = c("palier -1"= 3, "palier 0") ) # TODO - use palier values instead
 
 ```
 
