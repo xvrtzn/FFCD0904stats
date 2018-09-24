@@ -1,0 +1,233 @@
+---
+title: "Analyse critère principal FFCD0904"
+author: "Xavier Tizon"
+date: "18/09/2018"
+output: html_notebook
+---
+
+# Introduction
+
+Test d'analyse du critère princpal pour l'étude FFCD0904.
+
+Objectif : reproduire l'analyse faite en mars 2017 (L:\\STATISTIQUES\\3. Etudes\\ANUS\\FFCD 0904\\7. Analyse actualisation DDN phase I - mars 2017)
+
+
+```{r setup, echo=FALSE, results='hide', message=FALSE, warning=FALSE}
+library(summarytools)
+library(tidyverse)
+library(magrittr)
+library(stringr)
+library(skimr)
+library(lubridate)
+library(kableExtra )
+
+
+data_path <- "//titan/utilisateurs/Xavier.Tizon/DATA/FFCD0904/Export BdD/"
+
+fileNames <- list.files(path = data_path, pattern = "*.csv")
+# dfNames <- str_sub( start = 1L, end = -5L, fileNames)
+
+# TODO - palier codé à la main pour l'instant, à lire automatiquement : Source?
+df_palier <- data.frame( D_ID_PATIENT = c(1,2,3,4,6,7,8,9,10), 
+                         palier = c(-1, -1, -1, 0, 0, 0, 0, 0, 0) )
+
+```
+
+```{r echo=FALSE, warning=FALSE}
+
+# Create a df of data frames (one row per file)
+# The result is a 2-columns DF with the file name (w/o extension) in the first column, and a nested DF in the 2nd column
+data <- data_frame(fileName = fileNames) %>%
+  mutate(file_df = map(fileName,          
+                       ~ read.csv( file = file.path(data_path, .),
+                                   header = TRUE,
+                                   sep = ";" )
+                       )
+         )  
+
+```
+
+# Exploration - fiche 1
+
+## Recodage
+```{r}
+
+df_test <- data %>% 
+  dplyr::filter( fileName == "Fiche01_0904.csv" ) %>% 
+  select(file_df) %>% 
+  unnest()
+
+# Recodages :
+# "INCONNUE" en NA dans le champ F1_CRIT_CD4
+# "MANQUANT" en NA dans le champe F1_DAT_ACCORD_DEV
+
+df_test %<>% 
+  mutate_at( vars(F1_CRIT_CD4), funs(as.numeric(as.character(.))) ) %>% 
+  mutate_at( vars(F1_DAT_ACCORD_DEV), recode, "MANQUANT" = NA_character_) 
+
+# Recodage des champs date
+
+# algo 
+# 1. Transforme les champs en chaine de caractère
+# 2. ne garde que les 8 premiers carcatères
+# 3. utilise lubridate::ymd
+
+Date_field_names <- c("D_DATE_SAISIE", "D_MODIF", 
+                      "D_VALID_DATE", "F1_DAT_CONSENT", "F1_DAT_CONSENT_BIO",
+                      "F1_DAT_RANDO", "F1_DAT_ACCORD_DEV", "F1_DAT_NAISS")
+
+Date_recode <- function(x) {
+  x %>% 
+    as.character() %>%  
+    stringr::str_sub( start = 1L, end = 8L ) %>% 
+    lubridate::ymd()
+}
+
+df_test %<>% 
+  mutate_at( vars(Date_field_names), funs(Date_recode) ) 
+
+```
+
+```{r echo=FALSE}
+
+# Check column names
+# colnames(df_test)
+# str(df_test)
+
+skim(df_test) %>% 
+  skimr::kable()
+
+# dfSummary( df_test, style = 'grid', plain.ascii = FALSE, graph.magnif = 1.0 )
+# print(dfSummary(df_test, graph.magnif = 0.75), method = 'render')
+
+```
+```{r}
+# Fiche 8 - Suivi à 6 semaines
+
+df_F8 <- data %>% 
+  dplyr::filter( fileName == "Fiche08_0904.csv" ) %>% 
+  select(file_df) %>% 
+  unnest()
+
+# colnames(df_F8)
+
+Date_field_names_F8 <- c("D_DATE_SAISIE", "D_MODIF", 
+                      "D_VALID_DATE", "F8_DAT_BILAN_BIO", "F8_DAT_CHIR",
+                      "F8_DAT_PROG")
+
+df_F8 %<>% 
+  mutate_at( vars(Date_field_names_F8), funs(Date_recode) ) 
+
+
+```
+
+
+# Test - Evaluation morphologique à 6 et 8 semaines  
+
+Création de 2 tableaux "Evaluation morphologique" du rapport stats, en suivant la démarche du programme `02_Listing.sas`. 
+
+```{r echo = FALSE}
+# Merge F10_1 et F10_2 par patient
+df_F10_1 <- data %>% 
+  dplyr::filter( fileName == "Fiche10_1_0904.csv" ) %>% 
+  select(file_df) %>% 
+  unnest() %>% 
+  select(D_ID_PATIENT, 
+         F101_DAT_PROCTO_E6, 
+         F101_PROCTO_REP_E6, 
+         F101_DAT_ECHO_E6, 
+         F101_ECHO_REP_E6,
+         F101_ECHO_UST_E6, 
+         F101_ECHO_USN_E6, 
+         F101_DAT_PROCTO_E8, 
+         F101_PROCTO_REP_E8, 
+         F101_DAT_ECHO_E8,
+         F101_ECHO_REP_E8, 
+         F101_ECHO_UST_E8, 
+         F101_ECHO_USN_E8)
+
+df_F10_2 <- data %>% 
+  dplyr::filter( fileName == "Fiche10_2_0904.csv" ) %>% 
+  select(file_df) %>% 
+  unnest() %>% 
+  select(D_ID_PATIENT, 
+         F102_DAT_IRM_E6, 
+         F102_IRM_REP_E6, 
+         F102_DAT_PETSCAN_E6, 
+         F102_PETSCAN_REP_E6,
+         F102_DAT_IRM_E8, 
+         F102_IRM_REP_E8, 
+         F102_DAT_PETSCAN_E8, 
+         F102_PETSCAN_REP_E8)
+
+# Merges the 3 sources tables to create the temp data frame
+df_eva <- df_palier %>% 
+  left_join(df_F10_1, by = "D_ID_PATIENT") %>% 
+  left_join(df_F10_2, by = "D_ID_PATIENT") 
+
+# Recode dates from strings (contains "_DAT_") to date objects
+df_eva %<>% 
+  mutate_at( vars(matches("_DAT_")), funs(Date_recode) ) 
+
+# View(colnames(df_eva))
+
+str(df_eva)
+
+# Transform the table to make it a bit more tidy - The follow-up information get back as values 
+# instead of inside variable names 
+### MARCHPA!!!
+
+# First remove the F???_ leading part of the column names
+# Use purrr::set_names() with annonymous function of stringr operations
+
+# MARCHPA : solution : https://stackoverflow.com/questions/44708248/using-tidyverse-gather-to-output-multiple-value-vectors-with-a-single-key-in-a
+# Meilleure solution : rajouter l'information sur le temps avant de faire le join!!!
+
+test <- df_eva %>% 
+  purrr::set_names( ~ str_replace(., "F[0-9]{3}_", "") )  %>% 
+  separate( col = vars(-D_ID_PATIENT, -palier), into = c("var_name", "period"), sep=-2 )  
+  gather(key = "var", value = "val", -D_ID_PATIENT, -palier)  
+  spread( key = "period" , value = "val" ) 
+
+
+```
+## Tableau 1 - suivi à 6 semaines
+```{r echo = FALSE, results = 'asis'}
+
+# library(sjlabelled)
+library(readxl)
+
+var_names_and_labels <- read_excel( path = file.path(dirname(data_path), "EVA Labels.xlsx") )
+
+# Create named vector of name/labels pairs
+vars <- structure(as.character(var_names_and_labels$VAR_NAME), 
+              names = as.character(var_names_and_labels$VAR_LABEL))
+
+vars <- setNames(as.character(var_names_and_labels$VAR_NAME), var_names_and_labels$VAR_LABEL)
+
+vars <- unlist( split(as.character(var_names_and_labels$VAR_NAME), var_names_and_labels$VAR_LABEL))
+
+View(vars)
+
+df_eva %>% 
+  select( D_ID_PATIENT, matches("_E6") ) %>% 
+  dplyr::rename(!!vars) %>% 
+  kable( caption = "This is a nice table") %>% 
+  kable_styling("striped", full_width = FALSE) %>% 
+  group_rows( index = c("palier -1"= 3, "palier 0") ) # TODO - use palier values instead
+
+```
+
+## Tableau 2 - suivi à 8 semaines
+```{r echo = FALSE, results = 'asis'}
+df_eva %>% 
+  select( D_ID_PATIENT, palier, matches("_E8") ) %>% 
+  kable(caption = "a nice table")
+
+```
+
+
+
+
+
+
