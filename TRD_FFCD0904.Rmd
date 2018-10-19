@@ -1,7 +1,7 @@
 ---
 title: "Analyse critère principal FFCD0904"
 author: "Xavier Tizon"
-date: "18/09/2018"
+date: "18/10/2018"
 output: 
   html_document: 
     keep_md: yes
@@ -24,14 +24,51 @@ library(lubridate)
 library(kableExtra )
 
 
-data_path <- "//titan/utilisateurs/Xavier.Tizon/DATA/FFCD0904/Export BdD/"
+# data_path <- "C:/Users/Xavier TIZON/Dropbox/R/FFCD0904stats/FFCD0904_data/Export BdD/"
+data_path <- "C:/Users/Xavier TIZON/Dropbox/R/FFCD0904stats/FFCD0904_data/Origine/"
 
-fileNames <- list.files(path = data_path, pattern = "*.csv")
-# dfNames <- str_sub( start = 1L, end = -5L, fileNames)
-
+# Lire seulement les fichiers *_sas.csv - TODO - essayer avec les fichiers origine
+fileNames <- list.files(path = data_path, pattern = "*_sas.csv")
+  
 # TODO - palier codé à la main pour l'instant, à lire automatiquement : Source?
 df_palier <- data.frame( D_ID_PATIENT = c(1,2,3,4,6,7,8,9,10), 
                          palier = c(-1, -1, -1, 0, 0, 0, 0, 0, 0) )
+
+########## FUNCTIONS
+# recode un champ caractère au format date
+Date_recode <- function(x) {
+  x %>% 
+    as.character() %>%  
+    stringr::str_sub( start = 1L, end = 8L ) %>% 
+    lubridate::ymd()
+}
+
+# Coding of response in df variable responseColumn (ex: F7_EVAL in fiche 7)
+# 1=Réponse complète , 2=Réponse partielle , 3=Stabilité , 4=Progression , 5=Non évaluable
+# Réponse objective = 2 (OUI?) si CR ou PR, =1 (NON?) si SD, PD ou NE
+Compute_objectiveResponse <- function( df, responseColumn ) {
+  responseColumn <- enquo(responseColumn)
+  
+  df %>% 
+    mutate( 
+      objectiveResponse = case_when(
+        ( !! responseColumn ) %in% c(1,2)  ~ 2, 
+        ( !! responseColumn ) %in% c(3,4,5) ~ 1
+      )
+    )
+}
+
+# 1=Réponse complète , 2=Réponse partielle , 3=Stabilité , 4=Progression , 5=Non évaluable
+recode_eval <- frame_data(
+  ~objectiveResponse_numericCode,~objectiveResponse_explicitCode_FR,~objectiveResponse_explicitCode_EN,
+  1, "RC", "CR",
+  2, "RP", "PR",
+  3, "S", "SD",
+  4, "P", "PD", 
+  5, "NE", "NE"
+)
+
+
 
 ```
 
@@ -54,18 +91,21 @@ data <- data_frame(fileName = fileNames) %>%
 ## Recodage
 ```{r}
 
-df_test <- data %>% 
-  dplyr::filter( fileName == "Fiche01_0904.csv" ) %>% 
+df_F1 <- data %>% 
+  dplyr::filter( fileName == "fiche_1_sas.csv" ) %>% 
   select(file_df) %>% 
   unnest()
+
+# Show some infos on loaded DF
+str(df_F1)
 
 # Recodages :
 # "INCONNUE" en NA dans le champ F1_CRIT_CD4
 # "MANQUANT" en NA dans le champe F1_DAT_ACCORD_DEV
 
-df_test %<>% 
-  mutate_at( vars(F1_CRIT_CD4), funs(as.numeric(as.character(.))) ) %>% 
-  mutate_at( vars(F1_DAT_ACCORD_DEV), recode, "MANQUANT" = NA_character_) 
+df_F1 %<>% 
+  mutate_at( vars(F1_CRIT_CD4), funs(as.numeric(as.character(.))) )  
+  # mutate_at( vars(F1_DAT_ACCORD_DEV), recode, "MANQUANT" = NA_character_) 
 
 # Recodage des champs date
 
@@ -74,19 +114,13 @@ df_test %<>%
 # 2. ne garde que les 8 premiers carcatères
 # 3. utilise lubridate::ymd
 
-Date_field_names <- c("D_DATE_SAISIE", "D_MODIF", 
+Date_field_names_F1 <- c("D_DATE_SAISIE", "D_MODIF", 
                       "D_VALID_DATE", "F1_DAT_CONSENT", "F1_DAT_CONSENT_BIO",
                       "F1_DAT_RANDO", "F1_DAT_ACCORD_DEV", "F1_DAT_NAISS")
 
-Date_recode <- function(x) {
-  x %>% 
-    as.character() %>%  
-    stringr::str_sub( start = 1L, end = 8L ) %>% 
-    lubridate::ymd()
-}
 
-df_test %<>% 
-  mutate_at( vars(Date_field_names), funs(Date_recode) ) 
+df_F1 %<>% 
+  mutate_at( vars(Date_field_names_F1), funs(Date_recode) ) 
 
 ```
 
@@ -96,13 +130,40 @@ df_test %<>%
 # colnames(df_test)
 # str(df_test)
 
-skim(df_test) %>% 
+skim(df_F1) %>% 
   skimr::kable()
 
+# TODO - quel est le meilleur affichage???
 # dfSummary( df_test, style = 'grid', plain.ascii = FALSE, graph.magnif = 1.0 )
 # print(dfSummary(df_test, graph.magnif = 0.75), method = 'render')
 
 ```
+# Fiche 7 - Suivi à 6 semaines après le début du traitement
+
+```{r}
+
+df_F7 <- data %>% 
+  dplyr::filter( fileName == "fiche_7_sas.csv" ) %>% 
+  select(file_df) %>% 
+  unnest()
+
+# Some infos
+# colnames(df_F7)
+# str(df_F7)
+
+# Calcul de la réponse objective
+df_F7 %<>% 
+  Compute_objectiveResponse(F7_EVAL) %>% 
+  left_join(recode_eval, by = c("objectiveResponse" = "objectiveResponse_numericCode") )
+
+# Tableau résumé - réponse et réponse objective
+
+
+
+
+```
+
+
 ```{r}
 # Fiche 8 - Suivi à 6 semaines
 
