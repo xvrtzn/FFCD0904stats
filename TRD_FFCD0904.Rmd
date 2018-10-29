@@ -1,10 +1,8 @@
 ---
 title: "Analyse critère principal FFCD0904"
 author: "Xavier Tizon"
-date: "18/10/2018"
-output: 
-  html_document: 
-    keep_md: yes
+date: "`r format(Sys.time(), '%d/%m/%Y')`"
+output: html_notebook
 ---
 
 # Introduction
@@ -14,7 +12,7 @@ Test d'analyse du critère princpal pour l'étude FFCD0904.
 Objectif : reproduire l'analyse faite en mars 2017 (L:\\STATISTIQUES\\3. Etudes\\ANUS\\FFCD 0904\\7. Analyse actualisation DDN phase I - mars 2017)
 
 
-```{r setup, echo=FALSE, results='hide', message=FALSE, warning=FALSE}
+```{r setup, results='hide', message=FALSE, warning=FALSE}
 library(summarytools)
 library(tidyverse)
 library(magrittr)
@@ -23,6 +21,9 @@ library(skimr)
 library(lubridate)
 library(kableExtra)
 library(here)
+
+# Global display option for chunks
+knitr::opts_chunk$set(fig.width=12, fig.height=8, echo=FALSE, warning=FALSE, message=FALSE)
 
 
 # data_path <- "C:/Users/Xavier TIZON/Dropbox/R/FFCD0904stats/FFCD0904_data/Export BdD/"
@@ -59,6 +60,7 @@ compute_objectiveResponse <- function( df, responseColumn ) {
     )
 }
 
+# Dta frame used to recode RECIST evaluation as [1-5] into the most often used acronyms
 # 1=Réponse complète , 2=Réponse partielle , 3=Stabilité , 4=Progression , 5=Non évaluable
 recode_eval <- frame_data(
   ~objectiveResponse_numericCode,~objectiveResponse_explicitCode_FR,~objectiveResponse_explicitCode_EN,
@@ -72,7 +74,7 @@ recode_eval <- frame_data(
 ```
 
 
-```{r echo=FALSE, warning=FALSE}
+```{r warning=FALSE}
 
 # Create a df of data frames (one row per file)
 # The result is a 2-columns DF with the file name (w/o extension) in the first column, and a nested DF in the 2nd column
@@ -83,6 +85,40 @@ data <- data_frame(fileName = fileNames) %>%
                                    sep = ";" )
                        )
          )  
+
+```
+
+# Fiche 3 - Traitement
+
+```{r}
+
+df_F3 <- data %>% 
+  dplyr::filter( fileName == "fiche_3_sas.csv" ) %>% 
+  select(file_df) %>% 
+  unnest()
+
+# Some infos
+# colnames(df_F3)
+# str(df_F3)
+
+# Recode dates from strings (contains "_DAT_") to date objects
+df_F3 %<>% 
+  mutate_at( vars(matches("_DAT(_|E)")), # TODO - missing D_MODIF...
+             funs(recode_date) ) 
+
+
+# skim(df_F3) %>% 
+#   skimr::kable()
+# TODO - quel est le meilleur affichage???
+# 
+
+# dfSummary( df_F3, style = 'grid', plain.ascii = FALSE, graph.magnif = 1.0 )
+# print(dfSummary(df_F3, graph.magnif = 0.75), method = 'render')
+
+
+# Tableau résumé - réponse et réponse objective
+
+
 
 ```
 
@@ -97,8 +133,8 @@ df_F7 <- data %>%
   unnest()
 
 # Some infos
-colnames(df_F7)
-str(df_F7)
+# colnames(df_F7)
+# str(df_F7)
 
 # Recode dates from strings (contains "_DAT_") to date objects
 df_F7 %<>% 
@@ -111,13 +147,14 @@ df_F7 %<>%
   compute_objectiveResponse(F7_EVAL) %>% 
   left_join(recode_eval, by = c("objectiveResponse" = "objectiveResponse_numericCode") )
 
-# Tableau résumé - réponse et réponse objective
-
-skim(df_F7) %>% 
-  skimr::kable()
+# skim(df_F7) %>% 
+#   skimr::kable()
 # TODO - quel est le meilleur affichage???
 # dfSummary( df_test, style = 'grid', plain.ascii = FALSE, graph.magnif = 1.0 )
 # print(dfSummary(df_test, graph.magnif = 0.75), method = 'render')
+
+
+# Tableau résumé - réponse et réponse objective
 
 
 
@@ -132,11 +169,11 @@ df_F8 <- data %>%
   select(file_df) %>% 
   unnest()
 
-colnames(df_F8)
+# colnames(df_F8)
 
 # Calcul de la réponse objective
 df_F8 %<>% 
-  Compute_objectiveResponse(F81_EVAL) %>% 
+  compute_objectiveResponse(F81_EVAL) %>% 
   left_join(recode_eval, by = c("objectiveResponse" = "objectiveResponse_numericCode") )
 
 # TODO - tableau récap
@@ -155,126 +192,13 @@ df_F10 <- data %>%
   select(file_df) %>% 
   unnest()
 
-colnames(df_F10)
+# colnames(df_F10)
 
 # Calcul de la réponse objective
 df_F10 %<>% 
-  Compute_objectiveResponse(F10_PETSCAN_REP_GLOB_E16) %>% 
+  compute_objectiveResponse(F10_PETSCAN_REP_GLOB_E16) %>% 
   left_join(recode_eval, by = c("objectiveResponse" = "objectiveResponse_numericCode") )
 
 # TODO - tableau récap
 
 ```
-
-
-# Test - Evaluation morphologique à 6 et 8 semaines  
-
-Création de 2 tableaux "Evaluation morphologique" du rapport stats, en suivant la démarche du programme `02_Listing.sas`. 
-
-```{r echo = FALSE}
-# Merge F10_1 et F10_2 par patient
-df_F10_1 <- data %>% 
-  dplyr::filter( fileName == "Fiche10_1_0904.csv" ) %>% 
-  select(file_df) %>% 
-  unnest() %>% 
-  select(D_ID_PATIENT, 
-         F101_DAT_PROCTO_E6, 
-         F101_PROCTO_REP_E6, 
-         F101_DAT_ECHO_E6, 
-         F101_ECHO_REP_E6,
-         F101_ECHO_UST_E6, 
-         F101_ECHO_USN_E6, 
-         F101_DAT_PROCTO_E8, 
-         F101_PROCTO_REP_E8, 
-         F101_DAT_ECHO_E8,
-         F101_ECHO_REP_E8, 
-         F101_ECHO_UST_E8, 
-         F101_ECHO_USN_E8)
-
-df_F10_2 <- data %>% 
-  dplyr::filter( fileName == "Fiche10_2_0904.csv" ) %>% 
-  select(file_df) %>% 
-  unnest() %>% 
-  select(D_ID_PATIENT, 
-         F102_DAT_IRM_E6, 
-         F102_IRM_REP_E6, 
-         F102_DAT_PETSCAN_E6, 
-         F102_PETSCAN_REP_E6,
-         F102_DAT_IRM_E8, 
-         F102_IRM_REP_E8, 
-         F102_DAT_PETSCAN_E8, 
-         F102_PETSCAN_REP_E8)
-
-# Merges the 3 sources tables to create the temp data frame
-df_eva <- df_palier %>% 
-  left_join(df_F10_1, by = "D_ID_PATIENT") %>% 
-  left_join(df_F10_2, by = "D_ID_PATIENT") 
-
-# Recode dates from strings (contains "_DAT_") to date objects
-df_eva %<>% 
-  mutate_at( vars(matches("_DAT_")), funs(Date_recode) ) 
-
-# View(colnames(df_eva))
-
-str(df_eva)
-
-# Transform the table to make it a bit more tidy - The follow-up information get back as values 
-# instead of inside variable names 
-### MARCHPA!!!
-
-# First remove the F???_ leading part of the column names
-# Use purrr::set_names() with annonymous function of stringr operations
-
-# MARCHPA : solution : https://stackoverflow.com/questions/44708248/using-tidyverse-gather-to-output-multiple-value-vectors-with-a-single-key-in-a
-# Meilleure solution : rajouter l'information sur le temps avant de faire le join!!!
-
-# test <- df_eva %>% 
-#   purrr::set_names( ~ str_replace(., "F[0-9]{3}_", "") )  %>% 
-#   separate( col = vars(-D_ID_PATIENT, -palier), into = c("var_name", "period"), sep=-2 )  
-#   gather(key = "var", value = "val", -D_ID_PATIENT, -palier)  
-#   spread( key = "period" , value = "val" ) 
-
-
-```
-## Tableau 1 - suivi à 6 semaines
-```{r echo = FALSE, results = 'asis'}
-
-# library(sjlabelled)
-library(readxl)
-
-var_names_and_labels <- read_excel( path = file.path(dirname(data_path), "EVA Labels.xlsx") )
-
-# Create named vector of name/labels pairs
-vars <- structure(as.character(var_names_and_labels$VAR_NAME), 
-              names = as.character(var_names_and_labels$VAR_LABEL))
-
-vars <- setNames(as.character(var_names_and_labels$VAR_NAME), var_names_and_labels$VAR_LABEL)
-
-vars <- unlist( split(as.character(var_names_and_labels$VAR_NAME), var_names_and_labels$VAR_LABEL))
-
-# View(vars)
-
-df_eva %>% 
-  select( D_ID_PATIENT, matches("_E6") ) %>% 
-  # dplyr::rename(!!vars) %>% 
-  kable( caption = "This is a nice table") %>% 
-  kable_styling("striped", full_width = FALSE) %>% 
-  group_rows( index = c("palier -1"= 3, "palier 0") ) # TODO - use palier values instead
-
-```
-
-## Tableau 2 - suivi à 8 semaines
-```{r echo = FALSE, results = 'asis'}
-df_eva %>% 
-  select( D_ID_PATIENT, palier, matches("_E8") ) %>% 
-  kable(caption = "a nice table") %>% 
-  kable_styling("striped", full_width = FALSE) %>% 
-  group_rows( index = c("palier -1"= 3, "palier 0") ) # TODO - use palier values instead
-
-```
-
-
-
-
-
-
